@@ -29,4 +29,4 @@ class PlainNetwork(nn.Sequential):
 
 if __name__=='__main__':
     m = PlainNetwork(3, 3).cuda()
-    summary(m, (3, 1920, 1080), 1, 'cpu')
+    summary(m, (3, 1920, 1080), 1)
