@@ -46,6 +46,7 @@ def summary(model, input_size, batch_size=-1, device="cuda"):
                 ]
             else:
                 summary[m_key]["output_shape"] = list(output.size())
+                summary[m_key]["output_memsize"] = torch.numel(output) * 4
                 summary[m_key]["output_shape"][0] = batch_size
             module_name_dic[class_name] +=1
             depth[0] -=1
@@ -102,20 +103,21 @@ def summary(model, input_size, batch_size=-1, device="cuda"):
         h.remove()
         h2.remove()
 
-    print("--------------------------------------------------------------------------------------------------------------")
-    line_new = "{:<40}  {:>25}  {:>25} {:>15}".format("Layer (type)", "Input Shape", "Output Shape", "Param #")
+    print("-----------------------------------------------------------------------------------------------------------------------------")
+    line_new = "{:<40}  {:>25}  {:>25} {:>15} {:>15}".format("Layer (type)", "Input Shape", "Output Shape", "Param #", "output_mem_size")
     print(line_new)
-    print("==============================================================================================================")
+    print("=============================================================================================================================")
     total_params = 0
     total_output = 0
     trainable_params = 0
     for layer in summary:
         # input_shape, output_shape, trainable, nb_params
-        line_new = "{:<40}  {:>25}  {:>25} {:>15}".format(
+        line_new = "{:<40}  {:>25}  {:>25} {:>15} {:>15}".format(
             layer,
             str(summary[layer]['input_shape']),
             str(summary[layer]["output_shape"]),
             "{0:,}".format(summary[layer]["nb_params"]),
+            str(summary[layer]['output_memsize'])
         )
         total_params += summary[layer]["nb_params"]
         total_output += np.prod(summary[layer]["output_shape"])
@@ -130,16 +132,16 @@ def summary(model, input_size, batch_size=-1, device="cuda"):
     total_params_size = abs(total_params.numpy() * 4. / (1024 ** 2.))
     total_size = total_params_size + total_output_size + total_input_size
 
-    print("==============================================================================================================")
+    print("=============================================================================================================================")
     print("Total params: {0:,}".format(total_params))
     print("Trainable params: {0:,}".format(trainable_params))
     print("Non-trainable params: {0:,}".format(total_params - trainable_params))
-    print("--------------------------------------------------------------------------------------------------------------")
+    print("-----------------------------------------------------------------------------------------------------------------------------")
     print("Input size (MB): %0.2f" % total_input_size)
     print("Forward/backward pass size (MB): %0.2f" % total_output_size)
     print("Params size (MB): %0.2f" % total_params_size)
     print("Estimated Total Size (MB): %0.2f" % total_size)
-    print("--------------------------------------------------------------------------------------------------------------")
+    print("-----------------------------------------------------------------------------------------------------------------------------")
     # return summary
 
 
