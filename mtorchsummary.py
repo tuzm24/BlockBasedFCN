@@ -1,13 +1,18 @@
 import torch
 import torch.nn as nn
+import torch.cuda as cutorch
 from torch.autograd import Variable
-
 from collections import OrderedDict
 import numpy as np
 import os
 module_name_dic = {}
+import re
+
 
 def summary(model, input_size, batch_size=-1, device="cuda"):
+    init_gpu_memory = cutorch.memory_stats(0)['allocated_bytes.all.allocated']
+
+    conv_xd = re.compile('')
     def register_hook(module):
 
         def hook(module, input):
@@ -19,8 +24,12 @@ def summary(model, input_size, batch_size=-1, device="cuda"):
             module_idx = len(summary)
             m_key = "%s%s-%i" % (depth[0]*'    ',class_name, module_name_dic[class_name])
             summary[m_key] = OrderedDict()
-            summary[m_key]["input_shape"] = list(input[0].size())
-            summary[m_key]["input_shape"][0] = batch_size
+
+            if isinstance(input[0], list):
+                summary[m_key]["input_shape"] = [list(x.size()) for x in input[0]]
+            else:
+                summary[m_key]["input_shape"] = list(input[0].size())
+                summary[m_key]["input_shape"][0] = batch_size
 
             params = 0
             if hasattr(module, "weight") and hasattr(module.weight, "size"):
@@ -46,8 +55,15 @@ def summary(model, input_size, batch_size=-1, device="cuda"):
                 ]
             else:
                 summary[m_key]["output_shape"] = list(output.size())
-                summary[m_key]["output_memsize"] = torch.numel(output) * 4
+                summary[m_key]["input + output"] = np.prod(list(output.size())[1:]) * 1.0
+                if isinstance(summary[m_key]["input_shape"][0], list):
+                    for x in summary[m_key]['input_shape']:
+                        summary[m_key]["input + output"] += np.prod(x[1:])
+                else:
+                    summary[m_key]["input + output"] += np.prod(summary[m_key]['input_shape'][1:])
+                summary[m_key]["input + output"] *= 4
                 summary[m_key]["output_shape"][0] = batch_size
+                summary[m_key]['cuda_mem'] = cutorch.memory_stats(0)['allocated_bytes.all.allocated'] - init_gpu_memory
             module_name_dic[class_name] +=1
             depth[0] -=1
 
@@ -82,7 +98,7 @@ def summary(model, input_size, batch_size=-1, device="cuda"):
         input_size = [input_size]
 
     # batch_size of 2 for batchnorm
-    x = [torch.rand(2, *in_size).type(dtype) for in_size in input_size]
+    x = [torch.rand(1, *in_size).type(dtype) for in_size in input_size]
     # print(type(x[0]))
 
     # create properties
@@ -108,8 +124,9 @@ def summary(model, input_size, batch_size=-1, device="cuda"):
     print(line_new)
     print("=============================================================================================================================")
     total_params = 0
-    total_output = 0
+    total_output = 0.0
     trainable_params = 0
+    max_memory = 0
     for layer in summary:
         # input_shape, output_shape, trainable, nb_params
         line_new = "{:<40}  {:>25}  {:>25} {:>15} {:>15}".format(
@@ -117,10 +134,12 @@ def summary(model, input_size, batch_size=-1, device="cuda"):
             str(summary[layer]['input_shape']),
             str(summary[layer]["output_shape"]),
             "{0:,}".format(summary[layer]["nb_params"]),
-            str(summary[layer]['output_memsize'])
+            str(summary[layer]["input + output"])
         )
+        if max_memory<summary[layer]["input + output"]:
+            max_memory = summary[layer]["input + output"]
         total_params += summary[layer]["nb_params"]
-        total_output += np.prod(summary[layer]["output_shape"])
+        total_output += np.prod(summary[layer]["output_shape"], dtype=np.float32)
         if "trainable" in summary[layer]:
             if summary[layer]["trainable"] == True:
                 trainable_params += summary[layer]["nb_params"]
@@ -141,6 +160,7 @@ def summary(model, input_size, batch_size=-1, device="cuda"):
     print("Forward/backward pass size (MB): %0.2f" % total_output_size)
     print("Params size (MB): %0.2f" % total_params_size)
     print("Estimated Total Size (MB): %0.2f" % total_size)
+    print("Estimated Maxinum  Size (Byte): %0.2f" % max_memory)
     print("-----------------------------------------------------------------------------------------------------------------------------")
     # return summary
 
